@@ -55,7 +55,7 @@ jobs:
           test -s "$APK"
           "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump permissions "$APK" > /tmp/isaac-apk-permissions.txt
           ! grep -q 'android.permission.INTERNET' /tmp/isaac-apk-permissions.txt
-          ! unzip -Z1 "$APK" | grep -q '^assets/offline.html
+          ! unzip -Z1 "$APK" | grep -Fq 'assets/offline.html'
 
       - name: Upload offline loader (requires private HTML import)
         uses: actions/upload-artifact@v4
