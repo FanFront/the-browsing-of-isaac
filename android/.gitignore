@@ -4,3 +4,6 @@ build/
 local.properties
 *.jks
 *.keystore
+# A full offline page is generated from a separately owned game copy.
+# Never commit proprietary game binaries/assets to this source repository.
+app/src/main/assets/offline.html

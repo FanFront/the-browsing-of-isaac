@@ -1,4 +1,4 @@
-name: Android APK
+name: Android Offline Loader APK
 
 on:
   push:
@@ -17,12 +17,17 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build installable debug APK
+    name: Build offline-capable APK (no game payload)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout source only
         uses: actions/checkout@v4
+
+      - name: Ensure no copyrighted game payload is accidentally included
+        run: |
+          test ! -f android/app/src/main/assets/offline.html
+          ! grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -41,16 +46,16 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Assemble APK
+      - name: Assemble offline loader
         run: gradle -p android --no-daemon --stacktrace :app:assembleDebug
 
       - name: Verify APK
         run: test -s android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload installable APK
+      - name: Upload offline loader (requires private HTML import)
         uses: actions/upload-artifact@v4
         with:
-          name: isaac-android-debug-apk
+          name: isaac-android-offline-loader-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
