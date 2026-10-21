@@ -66,6 +66,52 @@ def pinned_chunks(meta: dict) -> list[tuple[str, str, int]]:
     return result
 
 
+# Original browser build validates the HTTP Content-Length header before reading.
+# Android WebView can synthesize or change this header for WebResourceResponse,
+# even for a complete InputStream. For our exact same-origin, in-APK chunks,
+# validate the status and full-range semantics here; the upstream body() code
+# still verifies that precisely the advertised number of bytes were read.
+UPSTREAM_WHOLE_HEADER = """  function wholeHeader(r, size) {
+    // Fetch exposes decoded bytes, but encoded responses retain their wire length.
+    var encoding = (r.headers.get('content-encoding') || 'identity').trim().toLowerCase();
+    return r.status === 200 && !r.headers.get('content-range')
+      && (encoding !== 'identity' || lengthHeader(r, size));
+  }"""
+OFFLINE_WHOLE_HEADER = """  function wholeHeader(r, size) {
+    // Android's intercepted WebResourceResponse may expose a synthetic or
+    // inaccurate Content-Length even when the full asset bytes are readable.
+    // Only bypass that HEADER check for this APK's own virtual asset origin.
+    // body() still validates the precise expected byte count before accepting.
+    if (r.url && r.url.startsWith('https://appassets.androidplatform.net/payload/c/')) {
+      var contentRange = r.headers.get('content-range');
+      if (r.status === 200 && !contentRange) return true;
+      if (r.status === 206 &&
+          contentRange === 'bytes 0-' + (size - 1) + '/' + size) return true;
+      return false;
+    }
+    var encoding = (r.headers.get('content-encoding') || 'identity').trim().toLowerCase();
+    return r.status === 200 && !r.headers.get('content-range')
+      && (encoding !== 'identity' || lengthHeader(r, size));
+  }"""
+UPSTREAM_WHOLE_FAILURE = "throw new Error('piece ' + s + ':' + i + ': invalid whole response');"
+OFFLINE_WHOLE_FAILURE = (
+    "throw new Error('piece ' + s + ':' + i + ': invalid whole response'"
+    " + ' (HTTP ' + r.status + ', length='"
+    " + r.headers.get('content-length') + ', range='"
+    " + r.headers.get('content-range') + ', expected=' + size + ')');"
+)
+
+
+def patch_webview_headers(html: str) -> str:
+    if html.count(UPSTREAM_WHOLE_HEADER) != 1:
+        raise ValueError("Upstream wholeHeader implementation changed; review offline compatibility patch")
+    if html.count(UPSTREAM_WHOLE_FAILURE) != 1:
+        raise ValueError("Upstream whole-response error branch changed; review diagnostic patch")
+    return html.replace(UPSTREAM_WHOLE_HEADER, OFFLINE_WHOLE_HEADER, 1).replace(
+        UPSTREAM_WHOLE_FAILURE, OFFLINE_WHOLE_FAILURE, 1
+    )
+
+
 def localize(html: str, meta: dict, begin: int, end: int) -> str:
     meta["base"] = LOCAL_BASE
     for stream in meta["streams"]:
@@ -78,7 +124,7 @@ def localize(html: str, meta: dict, begin: int, end: int) -> str:
         raise ValueError("Cannot disable optional online mod catalogue")
     if "https://cdn.jsdelivr.net/gh/chiikabu/boi-portable@" in html:
         raise ValueError("External game resource URL remains")
-    return html
+    return patch_webview_headers(html)
 
 
 def sha256_file(path: Path) -> str:
@@ -134,6 +180,10 @@ def verify(destination: Path) -> None:
         raise ValueError("Page contains a non-local resource base")
     if "window.isaacModCatalogue = null;" not in page:
         raise ValueError("Remote mod catalogue is not disabled")
+    if page.count(OFFLINE_WHOLE_HEADER) != 1:
+        raise ValueError("Missing WebView local Content-Length compatibility patch")
+    if OFFLINE_WHOLE_FAILURE not in page:
+        raise ValueError("Missing diagnostic output for intercepted HTTP responses")
     assets = doc.get("files", [])
     if len(assets) != 32 or len({f["name"] for f in assets}) != 32:
         raise ValueError("Must provide exactly 32 distinct chunks")
