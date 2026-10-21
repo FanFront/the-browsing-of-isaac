@@ -99,10 +99,12 @@ public final class MainActivity extends Activity {
                 new WebViewAssetLoader.InternalStoragePathHandler(this, contentDirectory))
             .build();
 
-        if (importedFile.isFile() && importedFile.length() >= MIN_PORTABLE_BYTES) {
-            launchGame(IMPORTED_PAGE);
-        } else if (hasBundledGame()) {
+        // A private full-game APK must always prefer its embedded payload.
+        // An older imported page should not shadow the bundled game on upgrade.
+        if (hasBundledGame()) {
             launchGame(BUNDLED_PAGE);
+        } else if (importedFile.isFile() && importedFile.length() >= MIN_PORTABLE_BYTES) {
+            launchGame(IMPORTED_PAGE);
         } else {
             showImportScreen("此 APK 已支持完全离线运行，但尚未包含游戏数据。");
         }

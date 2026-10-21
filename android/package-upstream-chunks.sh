@@ -55,6 +55,20 @@ if [[ "$COUNT" != "32" ]]; then
   echo "APK contains $COUNT chunks, expected 32" >&2
   exit 1
 fi
+# AssetManager.openFd() only works when APK entries are uncompressed.
+python3 - "$APK" <<'PY'
+import re
+import sys
+import zipfile
+with zipfile.ZipFile(sys.argv[1]) as apk:
+    names = [n for n in apk.namelist()
+             if re.fullmatch(r"assets/payload/c/(?:a[0-3]|b(?:[0-9]|1[0-9]|2[0-7]))\.bin", n)]
+    assert len(names) == 32, f"Expected 32 chunks, got {len(names)}"
+    for name in names:
+        assert apk.getinfo(name).compress_type == zipfile.ZIP_STORED, (
+            f"Compressed game chunk (cannot serve ranges efficiently): {name}")
+print("Verified 32 uncompressed, seekable APK chunks.")
+PY
 OUTPUT="$ROOT/.scratch/isaac-upstream-chunks-offline-debug.apk"
 cp -- "$APK" "$OUTPUT"
 echo "Private full offline APK: $OUTPUT"
