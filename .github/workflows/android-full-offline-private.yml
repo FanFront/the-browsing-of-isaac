@@ -1,0 +1,79 @@
+name: PRIVATE full offline Isaac APK (upstream chunks)
+
+on:
+  workflow_dispatch:
+    inputs:
+      i_own_game:
+        description: "I own a legitimate copy of Isaac and will keep this APK for personal use"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  refuse-public:
+    name: Block game distribution from public repositories
+    if: ${{ !github.event.repository.private || !inputs.i_own_game }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show private-build requirement
+        run: |
+          echo "::error::This full-game APK workflow must run in a PRIVATE source repository."
+          echo "::error::Confirm ownership of the game and keep generated artifacts private."
+          exit 1
+
+  build-private-apk:
+    name: Download pinned assets and assemble complete offline APK
+    if: ${{ github.event.repository.private && inputs.i_own_game }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source only
+        uses: actions/checkout@v4
+
+      - name: Configure OpenJDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Configure Gradle Wrapper
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Check for accidentally committed game data
+        run: |
+          test ! -e android/app/src/main/assets/offline.html
+          test ! -e android/app/src/main/assets/payload
+          ! grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+
+      - name: Download and verify published upstream chunks
+        run: python3 scripts/android/fetch_upstream_chunks.py --out .scratch/boi-portable
+
+      - name: Build fully bundled offline APK
+        run: bash android/package-upstream-chunks.sh .scratch/boi-portable
+
+      - name: Verify private APK content and offline permissions
+        run: |
+          APK=.scratch/isaac-upstream-chunks-offline-debug.apk
+          test -s "$APK"
+          unzip -Z1 "$APK" | grep -Fx 'assets/offline.html' >/dev/null
+          test "$(unzip -Z1 "$APK" | grep -Ec '^assets/payload/c/(a[0-3]|b([0-9]|1[0-9]|2[0-7]))\.bin$')" = 32
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$APK" > /tmp/isaac-permissions.txt
+          ! grep -q 'android.permission.INTERNET' /tmp/isaac-permissions.txt
+
+      - name: Upload private APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: isaac-complete-offline-apk-PRIVATE
+          path: .scratch/isaac-upstream-chunks-offline-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3

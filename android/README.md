@@ -29,7 +29,24 @@ The import may be large (hundreds of MiB or more). Leave ample free storage
 for the original file, the app-private copy and game saves. Android's WebView
 must be modern enough for WebAssembly JSPI, WebGL 2 and WebAudio.
 
-## 2. Self-contained offline APK: compile locally with your game
+## 2. Private GitHub Actions: full offline game without Ghidra
+
+There is now a **private-repository-only** Actions workflow that downloads
+the original author's already compiled `boi-portable` HTML and 32 chunk files,
+rewrites them to local asset URLs, and builds a self-contained, network-free
+APK. It does **not** need your game EXE, Ghidra, `pypcode`, or Emscripten.
+
+**Do not run it in the public fork:** the workflow explicitly blocks public
+builds. Create a separate private repository containing only your source code,
+then run **PRIVATE full offline Isaac APK (upstream chunks)** and confirm
+you own the game. The resulting private artifact is named
+`isaac-complete-offline-apk-PRIVATE`.
+
+See [the step-by-step guide](../docs/ANDROID_PRIVATE_ACTIONS.md).
+A successful CI package is not yet evidence of working gameplay on Android:
+JSPI/WebGL 2/WebAudio and device RAM are independent compatibility requirements.
+
+## 3. Self-contained offline APK: compile locally with your game
 
 To produce **one APK that already contains everything and launches offline
 without importing anything**, you need a standalone offline HTML generated
