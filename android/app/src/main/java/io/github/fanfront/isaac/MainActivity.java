@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -30,11 +32,17 @@ import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Offline host for a standalone portable HTML created from the player's own game.
@@ -48,6 +56,12 @@ public final class MainActivity extends Activity {
     private static final String BUNDLED_PAGE = ASSET_ORIGIN + "/assets/offline.html";
     private static final String IMPORTED_PAGE = ASSET_ORIGIN + "/imported/offline.html";
     private static final String BLOB_PREFIX = "isaac-apk-blob:";
+    private static final String PAYLOAD_PREFIX = "/payload/c/";
+    // Only pinned a0..a3 and b0..b27 archive chunks are served; no general file access.
+    private static final Pattern CHUNK_FILE = Pattern.compile(
+        "(?:a[0-3]|b(?:[0-9]|1[0-9]|2[0-7]))\\.bin");
+    private static final Pattern BYTE_RANGE = Pattern.compile("bytes=(\\d+)-(\\d+)");
+    private static final Pattern QUERY_RANGE = Pattern.compile("(\\d+)-(\\d+)");
     private static final int MAX_SAVE_EXPORT_BYTES = 8 * 1024 * 1024;
     private static final long MIN_PORTABLE_BYTES = 128 * 1024;
     private static final long MAX_PORTABLE_BYTES = 3L * 1024 * 1024 * 1024;
@@ -230,6 +244,133 @@ public final class MainActivity extends Activity {
             && (uri.getPort() == -1 || uri.getPort() == 443);
     }
 
+
+    /**
+     * Serves the upstream browser edition's pinned data chunks entirely from
+     * uncompressed APK assets. WebResourceRequest gives us Range headers,
+     * unlike WebViewAssetLoader.PathHandler; the upstream loader validates
+     * HTTP 206, Content-Range, and Content-Length for each requested window.
+     */
+    private WebResourceResponse serveLocalChunk(WebResourceRequest request) {
+        Uri uri = request.getUrl();
+        String path = uri.getPath();
+        if (path == null || !path.startsWith(PAYLOAD_PREFIX)) return blockedResponse();
+        String name = path.substring(PAYLOAD_PREFIX.length());
+        if (!CHUNK_FILE.matcher(name).matches()) return blockedResponse();
+
+        String assetName = "payload/c/" + name;
+        try {
+            long total;
+            // Gradle's noCompress("bin") is mandatory for openFd and cheap seeking.
+            try (AssetFileDescriptor fd = getAssets().openFd(assetName)) {
+                total = fd.getLength();
+            }
+            if (total <= 0) return blockedResponse();
+
+            String header = null;
+            for (Map.Entry<String, String> item : request.getRequestHeaders().entrySet()) {
+                if ("range".equalsIgnoreCase(item.getKey())) {
+                    header = item.getValue();
+                    break;
+                }
+            }
+            // WebView sometimes omits headers in worker requests; the upstream
+            // loader also puts the requested byte window in the "w" query.
+            String queryWindow = uri.getQueryParameter("w");
+            Matcher matcher = header == null ? null : BYTE_RANGE.matcher(header.trim());
+            if (header != null && !matcher.matches()) return rangeNotSatisfiable(total);
+            if (header == null && queryWindow != null) {
+                matcher = QUERY_RANGE.matcher(queryWindow);
+                if (!matcher.matches()) return rangeNotSatisfiable(total);
+            }
+            boolean partial = matcher != null;
+            long from = partial ? Long.parseLong(matcher.group(1)) : 0L;
+            long to = partial ? Long.parseLong(matcher.group(2)) : total - 1L;
+            if (from < 0 || to < from || to >= total) return rangeNotSatisfiable(total);
+            long count = to - from + 1L;
+
+            InputStream input = getAssets().open(assetName, AssetManager.ACCESS_STREAMING);
+            try {
+                skipExactly(input, from);
+                WebResourceResponse result = new WebResourceResponse(
+                    "application/octet-stream", null, new BoundedInputStream(input, count));
+                result.setStatusCodeAndReasonPhrase(
+                    partial ? 206 : 200, partial ? "Partial Content" : "OK");
+                Map<String, String> responseHeaders = new HashMap<>();
+                responseHeaders.put("Accept-Ranges", "bytes");
+                responseHeaders.put("Content-Length", Long.toString(count));
+                responseHeaders.put("Cache-Control", "no-store");
+                if (partial) {
+                    responseHeaders.put("Content-Range",
+                        "bytes " + from + "-" + to + "/" + total);
+                }
+                result.setResponseHeaders(responseHeaders);
+                return result;
+            } catch (Exception error) {
+                input.close();
+                throw error;
+            }
+        } catch (Exception failure) {
+            android.util.Log.e("IsaacOffline", "Local chunk read failed: " + name, failure);
+            return blockedResponse();
+        }
+    }
+
+    private static WebResourceResponse rangeNotSatisfiable(long total) {
+        WebResourceResponse response = new WebResourceResponse(
+            "application/octet-stream", null, new ByteArrayInputStream(new byte[0]));
+        response.setStatusCodeAndReasonPhrase(416, "Range Not Satisfiable");
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Content-Range", "bytes */" + total);
+        response.setResponseHeaders(headers);
+        return response;
+    }
+
+    private static void skipExactly(InputStream input, long amount) throws IOException {
+        while (amount > 0) {
+            long skipped = input.skip(amount);
+            if (skipped > 0) {
+                amount -= skipped;
+            } else if (input.read() == -1) {
+                throw new IOException("Unexpected end of payload asset");
+            } else {
+                amount--;
+            }
+        }
+    }
+
+    private static final class BoundedInputStream extends FilterInputStream {
+        private long remaining;
+
+        BoundedInputStream(InputStream input, long limit) {
+            super(input);
+            remaining = limit;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining == 0) return -1;
+            int value = super.read();
+            if (value >= 0) remaining--;
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int off, int len) throws IOException {
+            if (remaining == 0) return -1;
+            int count = in.read(buffer, off, (int) Math.min(remaining, len));
+            if (count > 0) remaining -= count;
+            return count;
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            long skipped = in.skip(Math.min(Math.max(n, 0L), remaining));
+            remaining -= skipped;
+            return skipped;
+        }
+    }
+
     private void launchGame(String localPage) {
         status = null;
         WebView view = new WebView(this);
@@ -259,6 +400,9 @@ public final class MainActivity extends Activity {
                 Uri uri = request.getUrl();
                 if (isLocalOrigin(uri)) {
                     String path = uri.getPath();
+                    if (path != null && path.startsWith(PAYLOAD_PREFIX)) {
+                        return serveLocalChunk(request);
+                    }
                     if (path != null && (path.startsWith("/assets/")
                             || path.startsWith("/imported/"))) {
                         WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);

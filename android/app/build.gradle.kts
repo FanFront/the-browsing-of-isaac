@@ -21,6 +21,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // Upstream range requests require seekable (uncompressed) .bin APK entries.
+    androidResources {
+        noCompress += "bin"
+    }
 }
 
 dependencies {

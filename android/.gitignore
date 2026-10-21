@@ -7,3 +7,6 @@ local.properties
 # A full offline page is generated from a separately owned game copy.
 # Never commit proprietary game binaries/assets to this source repository.
 app/src/main/assets/offline.html
+
+# Browser-port chunk payload is staged only during private builds.
+app/src/main/assets/payload/
