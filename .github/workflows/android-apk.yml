@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "android/**"
+      - "scripts/android/**"
       - ".github/workflows/android-apk.yml"
   pull_request:
     paths:
       - "android/**"
+      - "scripts/android/**"
       - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
@@ -28,6 +30,11 @@ jobs:
         run: |
           test ! -f android/app/src/main/assets/offline.html
           ! grep -Eq '<uses-permission[^>]+android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+
+      - name: Validate offline packaging scripts (without game data)
+        run: |
+          python3 -m py_compile scripts/android/fetch_upstream_chunks.py
+          bash -n android/package-upstream-chunks.sh
 
       - name: Set up Java
         uses: actions/setup-java@v4
