@@ -175,13 +175,34 @@ sudo apt-get install -y git unzip zip curl python3 python3-pip python3-venv \
   build-essential clang cmake ninja-build
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install pypcode capstone pillow brotli pefile
+python -m pip install --upgrade pip -i https://pypi.org/simple
+# Use the Python 3.11-compatible pypcode line; pypcode 4.x needs Python >=3.12.
+# -i bypasses mirrors that report "from versions: none".
+python -m pip install "pypcode==3.3.3" capstone pillow brotli pefile -i https://pypi.org/simple
+python -c "import pypcode; print('pypcode available:', pypcode.__file__)"
 npm ci
 node --version
 python --version
 clang++ --version
 ```
+
+If installation still reports `No matching distribution found for pypcode`,
+check the exact Python version, CPU architecture and effective pip indexes:
+
+```bash
+python --version
+uname -m
+python -m pip config list
+python -m pip index versions pypcode -i https://pypi.org/simple
+python -m pip debug --verbose
+```
+
+The 3.3.3 release provides prebuilt wheels for CPython 3.11, 3.12 and 3.13
+on common Linux x86-64 platforms; its metadata requires Python >=3.10.
+The current 4.0.1 release requires Python >=3.12. A globally configured
+private mirror, unsupported Python/architecture, or an overly old pip
+can cause pip to see no applicable distributions. Avoid forcing an
+incompatible wheel by renaming it, or suppressing interpreter checks.
 
 To install Emscripten if `emcc --version` is unavailable, for example:
 
@@ -415,6 +436,10 @@ the previous app to resolve `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
 - **`THIRD_PARTY` undefined in `lua_build.py`:** manually extract the Lua
   tarball under `tools/lua-5.3.3` before running the Lua build.
 - **Ghidra / Gradle Java error:** use your existing OpenJDK 21 for both. Use `./android/gradlew` to obtain the pinned Gradle 8.11.1 for AGP 8.10.1.
+- **`No matching distribution found for pypcode`:** run `python --version`,
+  `uname -m`, and `python -m pip config list`. Use `pypcode==3.3.3`
+  with `-i https://pypi.org/simple`, inside the project's activated
+  virtual environment. The newer 4.x line requires Python >=3.12.
 - **`emcc not found`:** `source "$HOME/emsdk/emsdk_env.sh"` in your
   current terminal, or supply `EMCC`/`EMSDK` paths.
 - **Gradle cannot see SDK:** set `ANDROID_HOME` to the SDK directory and
