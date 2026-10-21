@@ -64,12 +64,3 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-
-
-      - name: Upload offline loader (requires private HTML import)
-        uses: actions/upload-artifact@v4
-        with:
-          name: isaac-android-offline-loader-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
