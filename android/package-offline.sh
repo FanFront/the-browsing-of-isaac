@@ -54,7 +54,7 @@ PY
 gradle -p "$ROOT/android" --no-daemon :app:assembleDebug
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 test -s "$APK"
-unzip -Z1 "$APK" | grep -q '^assets/offline.html$' || {
+unzip -Z1 "$APK" | grep -Fx 'assets/offline.html' >/dev/null || {
   echo "Offline game HTML was not packaged into the APK!" >&2
   exit 1
 }
