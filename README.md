@@ -44,7 +44,7 @@ Vibration follows the game's Rumble option.
 
 ## Android APK
 
-This fork includes an [Android APK builder](android/README.md) in GitHub Actions. It produces an installable online-only Android wrapper (not an offline game bundle); no copyrighted game assets are included.
+This fork has an [Android offline player](android/README.md). The public GitHub Action builds an offline-capable APK: import a complete, self-contained `isaac.html` generated from your own copy once, then play without the network. To create an all-in-one offline APK that already contains the game, bundle your personally generated HTML with the local build script; the public source repository does not include proprietary game data.
 
 ## On a keyboard
 

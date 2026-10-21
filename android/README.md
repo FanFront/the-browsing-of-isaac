@@ -1,54 +1,85 @@
-# Android APK
+# Isaac Android: offline editions
 
-This directory adds a small **online-only** Android WebView host for the existing
-touch-enabled site. It is not an Android native port of the game, and the APK
-**does not include game files, recompilation output, Wasm or copyrighted game
-assets**. The website and its CDN must be reachable to play.
+The Android app **no longer opens an online game URL**. It hosts a complete
+standalone portable HTML under the local
+`https://appassets.androidplatform.net/` virtual origin via Android's
+`WebViewAssetLoader`. Android manifest declares **no INTERNET permission**,
+and WebView explicitly blocks HTTP(S) network requests.
 
-## Build and install using GitHub Actions
+There are two packaging modes. They share the exact same offline game loader.
 
-1. Open **Actions → Android APK → Run workflow** (or push a change under
-   `android/` on `main`).
-2. Open the successful workflow run and download its
-   `isaac-android-debug-apk` artifact ZIP.
-3. Extract `app-debug.apk` from the ZIP on the phone, then install it
-   (Android may ask for permission to install apps from that file manager).
+## 1. GitHub Actions: offline player / import-your-own-game
 
-The workflow assembles a **debug-signed APK** so it can be sideloaded without
-signing secrets. It is **not** a Play Store release build. An Android 10+
-device with an up-to-date Android System WebView is required.
+The public repository's **Android Offline Loader APK** workflow creates a
+small, installable APK with the Android app but **without copyrighted game
+assets**. This is intentional: the source checkout has no game exe, recompiled
+Wasm, or packed archives from which to build the game.
 
-## Local build
+1. Run **Actions → Android Offline Loader APK → Run workflow** or use the
+   automatically triggered run after Android code changes.
+2. Download `isaac-android-offline-loader-apk`, extract and install the APK.
+3. Generate a single `isaac.html` using the instructions below and copy it
+   to your phone (USB, SD card, or any file transfer).
+4. Open the app, tap **选择离线游戏 HTML**, and select `isaac.html`.
+5. The app streams the HTML into private app storage, verifies the portable
+   marker, and launches the game entirely offline. Future launches re-use
+   the imported HTML; **neither a website nor network access is required**.
 
-Use JDK 17, Android SDK platform 35/build tools 35.0.0, and Gradle 8.9:
+The import may be large (hundreds of MiB or more). Leave ample free storage
+for the original file, the app-private copy and game saves. Android's WebView
+must be modern enough for WebAssembly JSPI, WebGL 2 and WebAudio.
 
-```sh
-gradle -p android :app:assembleDebug
-# output: android/app/build/outputs/apk/debug/app-debug.apk
+## 2. Self-contained offline APK: compile locally with your game
+
+To produce **one APK that already contains everything and launches offline
+without importing anything**, you need a standalone offline HTML generated
+from a copy of the game you own.
+
+See [docs/DEVELOPING.md](../docs/DEVELOPING.md) for the prerequisites and
+steps to build the game WebAssembly module and asset distribution
+(`.scratch/game-dist`). From that completed distribution, run:
+
+```bash
+python scripts/recomp/assets/portable.py offline .scratch/game-dist .scratch/isaac.html
+bash android/package-offline.sh .scratch/isaac.html
 ```
 
-The launch address is `app/src/main/res/values/strings.xml` → `game_url`.
-It defaults to `https://tboi.online/`. Change it to your own **HTTPS**
-deployment only if that deployment includes the complete game payload; a
-GitHub source checkout alone cannot serve it. Network access is required.
+The second command needs JDK 17, Android SDK 35 / build-tools 35.0.0 and
+Gradle 8.9 available locally. It copies the HTML **temporarily** to
+`android/app/src/main/assets/offline.html`, builds a debug-signed APK,
+verifies the payload was actually packaged, removes the staging copy,
+and writes **`.scratch/isaac-self-contained-offline-debug.apk`**.
 
-## Runtime behavior and limitations
+Alternatively you can manually place the HTML at
+`android/app/src/main/assets/offline.html` and run
+`gradle -p android :app:assembleDebug`; that payload file is ignored by git.
+**Never commit the HTML or upload an APK containing the proprietary assets
+to public GitHub Actions artifacts/releases.** This fork is a public source
+repo, so its automated APK intentionally does not package game assets.
+Use your private, authorized build environment for personal packages.
 
-- Fullscreen immersive WebView with hardware acceleration; rotations keep the
-  same WebView instance and touch controls come from the website itself.
-- Web storage / IndexedDB persist in **this app's own storage**. Chrome's
-  existing saves are *not* shared with the APK. Uninstalling or clearing app
-  storage deletes them; export saves before doing so.
-- Android's file picker supports ZIP / `.dat` imports. HTTPS downloads use the
-  system Download Manager. Small blob-based save exports (up to 8 MiB) are
-  saved under `Downloads/Isaac`; oversized blob exports are not supported.
-- Android Back sends Escape to the game; press Back a second time within
-  1.8 seconds to exit. External links open in a regular browser.
-- The website requires modern browser support for WebAssembly JSPI, WebGL 2
-  and WebAudio. WebView capabilities, device memory and GPU drivers vary.
-  Successful APK compilation does **not** prove that gameplay works on every
-  phone. Test game boot, touch, audio, imports/exports and an actual run on
-  your device.
+## Compatibility and limits
 
-The game's copyrights and other upstream notices remain as described in
-[../README.md](../README.md) and [../LICENSE](../LICENSE).
+- The offline HTML is generated by
+  `scripts/recomp/assets/portable.py offline`, which puts the full game,
+  Wasm and the archives into one large base64-embedded page. A normal
+  website's `index.html` or cached tab is **not** equivalent.
+- Imported content persists in the app's internal storage and the app uses
+  IndexedDB for saves and mods. The APK **does not** share Chrome's saves.
+  Clearing app storage or uninstalling removes the import and saves;
+  export saves first.
+- HTML files are copied with streaming I/O, not loaded whole into Java
+  memory; nevertheless the WebView game loader itself may need substantial
+  RAM, GPU and CPU resources. Some phones will not support the game.
+- Game ZIP / `.dat` imports use Android's file picker; supported small
+  blob-based exports (up to 8 MiB) are saved to `Downloads/Isaac`.
+- Press Back once for in-game Escape/pause and twice quickly to exit.
+- The APK is **debug-signed**, intended for private sideloading, not Play
+  Store distribution. A successful Actions build verifies compilation, not
+  actual gameplay on a physical Android device.
+- No internet permission or remote fallback: if an imported file contains
+  external URLs, those requests are blocked, not downloaded.
+
+Game copyrights and upstream notices: [README](../README.md) and
+[LICENSE](../LICENSE). This source repo alone cannot produce a populated
+offline game package.

@@ -50,6 +50,8 @@ const privateExact = new Set([
   "native/eos_stub/EOSSDK-Win32-Shipping.dll",
   "native/openal_stub/OpenAL32.dll",
   "native/steam_stub/steam_api.dll",
+  // Locally packaged, user-owned offline HTML. Keep ignored and NEVER tracked.
+  "android/app/src/main/assets/offline.html",
 ]);
 
 const trackedLargeExceptions = new Map([
