@@ -27,7 +27,7 @@ jobs:
       - name: Ensure no copyrighted game payload is accidentally included
         run: |
           test ! -f android/app/src/main/assets/offline.html
-          ! grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          ! grep -Eq '<uses-permission[^>]+android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
       - name: Set up Java
         uses: actions/setup-java@v4
