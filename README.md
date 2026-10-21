@@ -42,6 +42,10 @@ choose. Switching to another tab pauses the run.
 
 Vibration follows the game's Rumble option.
 
+## Android APK
+
+This fork includes an [Android APK builder](android/README.md) in GitHub Actions. It produces an installable online-only Android wrapper (not an offline game bundle); no copyrighted game assets are included.
+
 ## On a keyboard
 
 | Key | |
