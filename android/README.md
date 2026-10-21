@@ -44,8 +44,10 @@ python scripts/recomp/assets/portable.py offline .scratch/game-dist .scratch/isa
 bash android/package-offline.sh .scratch/isaac.html
 ```
 
-The second command needs JDK 17, Android SDK 35 / build-tools 35.0.0 and
-Gradle 8.9 available locally. It copies the HTML **temporarily** to
+The second command runs under **OpenJDK 21**, Android SDK **36** / Build Tools
+**36.0.0**, **Gradle 8.11.1+** (with Android Gradle Plugin **8.10.1**) locally.
+The app still emits **Java 17-compatible bytecode**. Its \`targetSdk\` remains
+35 while its \`compileSdk\` is 36; these settings are separate. It copies the HTML **temporarily** to
 `android/app/src/main/assets/offline.html`, builds a debug-signed APK,
 verifies the payload was actually packaged, removes the staging copy,
 and writes **`.scratch/isaac-self-contained-offline-debug.apk`**.

@@ -128,25 +128,31 @@ java -version
 gradle --version
 adb version
 echo "ANDROID_HOME=$ANDROID_HOME"
-test -d "${ANDROID_HOME:-/invalid}/platforms/android-35" && echo "SDK 35 present"
-test -d "${ANDROID_HOME:-/invalid}/build-tools/35.0.0" && echo "Build Tools 35.0.0 present"
+test -d "${ANDROID_HOME:-/invalid}/platforms/android-36" && echo "SDK 36 present"
+test -d "${ANDROID_HOME:-/invalid}/build-tools/36.0.0" && echo "Build Tools 36.0.0 present"
 ```
 
-For this Android Gradle Plugin project, **JDK 17**, platform **35**,
-Build Tools **35.0.0**, and Gradle **8.9 or later supported by AGP 8.7.3**
-are suitable. Existing Build Tools 35.0.1 may coexist, but the current
-GitHub workflow explicitly installs 35.0.0.
+**Your existing setup is Android SDK 36 + OpenJDK 21. Reuse both.**
+This fork now builds with AGP **8.10.1**, Gradle **8.11.1**, SDK platform
+**36**, and Build Tools **36.0.0**. Do not install JDK 17 merely for this
+project: Gradle 8.11.1 runs on JDK 21. The Java source/target compatibility
+remains **17** so the Android code does not depend on Java 21 APIs.
+The Android `compileSdk` is **36**, whereas `targetSdk` is deliberately
+**35** until Android 16 behavior changes are tested; changing the SDK
+installed on your build machine does not require raising `targetSdk`.
 
-If `sdkmanager` is available and 35.0.0 is missing, install just that part:
+If `sdkmanager` is available and a component is missing, install only
+the missing component:
 
 ```bash
-sdkmanager "platforms;android-35" "build-tools;35.0.0"
+sdkmanager "platforms;android-36" "build-tools;36.0.0"
 ```
 
-**Ghidra 12.1 requires JDK 21**, which is separate from JDK 17 used by
-Android/Gradle. Install both JDKs if necessary and select the appropriate
-`JAVA_HOME` at each stage. Never assume the Android JDK is sufficient for
-Ghidra.
+**Ghidra 12.1 also uses JDK 21**, so the same OpenJDK 21 installation
+can be used for Ghidra and Android Gradle; no JDK switching is needed.
+Verify `gradle --version` reports Gradle 8.11.1 or a compatible newer
+8.x release, and JVM 21. If the installed Gradle is older, install
+Gradle 8.11.1 or select it via your build tool.
 
 ## 5. Install/check native WASM build dependencies
 
@@ -182,8 +188,8 @@ emcc --version
 
 Use Ghidra's official distribution and export the **actual**
 `GHIDRA_HOME` directory where `support/analyzeHeadless` exists. Ghidra
-requires Java 21; switch `JAVA_HOME` to your installed JDK 21 before running
-its exporter.
+requires Java 21; use the same OpenJDK 21 already configured
+for your Android environment when running the exporter.
 
 ```bash
 export GHIDRA_HOME="/path/to/ghidra_12.1.2_PUBLIC"
@@ -335,14 +341,15 @@ large HTML file. A plain downloaded web page or the source repo's root
 
 ## 12. Build the fully offline APK (uses existing Android tooling)
 
-Set `JAVA_HOME` back to **JDK 17**, and check `gradle --version`.
-Make sure the SDK platform and Build Tools from step 4 are installed in
-the **same environment** running Gradle.
+Keep your existing **OpenJDK 21** (there is no need to switch to JDK 17).
+Check `gradle --version` is Gradle **8.11.1** or compatible newer 8.x
+and the JVM reports 21. Make sure SDK 36 and Build Tools 36.0.0
+from step 4 are installed in the **same environment** running Gradle.
 
 ```bash
 java -version
 gradle --version
-sdkmanager "platforms;android-35" "build-tools;35.0.0"
+sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
 bash android/package-offline.sh .scratch/isaac.html
 
@@ -395,7 +402,7 @@ the previous app to resolve `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
   need investigation; build without `--strict` first and inspect the list.
 - **`THIRD_PARTY` undefined in `lua_build.py`:** manually extract the Lua
   tarball under `tools/lua-5.3.3` before running the Lua build.
-- **Ghidra Java error:** use JDK 21 for Ghidra; use JDK 17 for Android Gradle.
+- **Ghidra / Gradle Java error:** use your existing OpenJDK 21 for both. Gradle must be at least 8.11.1 (or a compatible newer 8.x) for AGP 8.10.1.
 - **`emcc not found`:** `source "$HOME/emsdk/emsdk_env.sh"` in your
   current terminal, or supply `EMCC`/`EMSDK` paths.
 - **Gradle cannot see SDK:** set `ANDROID_HOME` to the SDK directory and
