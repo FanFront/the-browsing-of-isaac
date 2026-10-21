@@ -124,8 +124,12 @@ Do not run later recompilation steps until that checksum returns `OK`.
 Previous Android setup may already supply these. Check them first:
 
 ```bash
+# Reuse your Ubuntu host's JDK 21 and Android SDK without reinstalling them.
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_HOME=/ossdata/android-sdk
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 java -version
-gradle --version
+./android/gradlew --version
 adb version
 echo "ANDROID_HOME=$ANDROID_HOME"
 test -d "${ANDROID_HOME:-/invalid}/platforms/android-36" && echo "SDK 36 present"
@@ -150,9 +154,14 @@ sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
 **Ghidra 12.1 also uses JDK 21**, so the same OpenJDK 21 installation
 can be used for Ghidra and Android Gradle; no JDK switching is needed.
-Verify `gradle --version` reports Gradle 8.11.1 or a compatible newer
-8.x release, and JVM 21. If the installed Gradle is older, install
-Gradle 8.11.1 or select it via your build tool.
+The project now includes a **standard Gradle Wrapper** at
+`android/gradlew` and pins **Gradle 8.11.1** with a SHA-256-verified
+distribution download. Run `./android/gradlew --version` from the repository
+root; it will download Gradle 8.11.1 into `~/.gradle/wrapper/dists` on
+first use. There is **no need** for a globally installed `gradle` command,
+`GRADLE_HOME` or `GRADLE_USER_HOME`. Your existing cached Gradle
+**9.7.1** may remain untouched; don't use it for this AGP 8.10.1 project
+because compatibility has not been verified.
 
 ## 5. Install/check native WASM build dependencies
 
@@ -341,14 +350,17 @@ large HTML file. A plain downloaded web page or the source repo's root
 
 ## 12. Build the fully offline APK (uses existing Android tooling)
 
-Keep your existing **OpenJDK 21** (there is no need to switch to JDK 17).
-Check `gradle --version` is Gradle **8.11.1** or compatible newer 8.x
-and the JVM reports 21. Make sure SDK 36 and Build Tools 36.0.0
-from step 4 are installed in the **same environment** running Gradle.
+Keep your existing **OpenJDK 21** (no need to switch to JDK 17).
+The project now includes a **Gradle 8.11.1 Wrapper**; do not use
+the cached Gradle 9.7.1 binary. Make sure SDK 36 and Build Tools 36.0.0
+are installed in the **same environment** running Gradle.
 
 ```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_HOME=/ossdata/android-sdk
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 java -version
-gradle --version
+./android/gradlew --version
 sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
 bash android/package-offline.sh .scratch/isaac.html
@@ -402,7 +414,7 @@ the previous app to resolve `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
   need investigation; build without `--strict` first and inspect the list.
 - **`THIRD_PARTY` undefined in `lua_build.py`:** manually extract the Lua
   tarball under `tools/lua-5.3.3` before running the Lua build.
-- **Ghidra / Gradle Java error:** use your existing OpenJDK 21 for both. Gradle must be at least 8.11.1 (or a compatible newer 8.x) for AGP 8.10.1.
+- **Ghidra / Gradle Java error:** use your existing OpenJDK 21 for both. Use `./android/gradlew` to obtain the pinned Gradle 8.11.1 for AGP 8.10.1.
 - **`emcc not found`:** `source "$HOME/emsdk/emsdk_env.sh"` in your
   current terminal, or supply `EMCC`/`EMSDK` paths.
 - **Gradle cannot see SDK:** set `ANDROID_HOME` to the SDK directory and

@@ -45,16 +45,34 @@ bash android/package-offline.sh .scratch/isaac.html
 ```
 
 The second command runs under **OpenJDK 21**, Android SDK **36** / Build Tools
-**36.0.0**, **Gradle 8.11.1+** (with Android Gradle Plugin **8.10.1**) locally.
-The app still emits **Java 17-compatible bytecode**. Its \`targetSdk\` remains
-35 while its \`compileSdk\` is 36; these settings are separate. It copies the HTML **temporarily** to
+**36.0.0**, and **Gradle 8.11.1** (Android Gradle Plugin **8.10.1**).
+The app still emits **Java 17-compatible bytecode**. Its `targetSdk` remains
+35 while its `compileSdk` is 36. The build script uses the **included Gradle
+Wrapper** (`android/gradlew`), so no global `gradle` command is required.
+
+For the Ubuntu environment with a local Android SDK, you can reuse your
+already installed tools:
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_HOME=/ossdata/android-sdk
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
+./android/gradlew --version      # downloads and uses Gradle 8.11.1 once
+```
+
+Your older **Gradle 9.7.1 wrapper cache** can remain installed; this project
+pins Gradle 8.11.1 because Gradle 9 has not been verified with AGP 8.10.1.
+`GRADLE_HOME` and `GRADLE_USER_HOME` are optional: leaving them unset is
+supported. The wrapper defaults to `~/.gradle` for downloaded distributions.
+
+The package script copies the HTML **temporarily** to
 `android/app/src/main/assets/offline.html`, builds a debug-signed APK,
-verifies the payload was actually packaged, removes the staging copy,
-and writes **`.scratch/isaac-self-contained-offline-debug.apk`**.
+verifies the payload was packaged, removes the staging copy, and writes
+**`.scratch/isaac-self-contained-offline-debug.apk`**.
 
 Alternatively you can manually place the HTML at
 `android/app/src/main/assets/offline.html` and run
-`gradle -p android :app:assembleDebug`; that payload file is ignored by git.
+`./android/gradlew -p android :app:assembleDebug`; that payload file is ignored by git.
 **Never commit the HTML or upload an APK containing the proprietary assets
 to public GitHub Actions artifacts/releases.** This fork is a public source
 repo, so its automated APK intentionally does not package game assets.

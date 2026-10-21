@@ -51,7 +51,36 @@ with p.open("rb") as f:
         raise SystemExit("Input is not a portable offline HTML (missing embedded payload marker)")
 PY
 
-gradle -p "$ROOT/android" --no-daemon :app:assembleDebug
+# Reuse an existing local JDK/SDK; don't require a globally installed Gradle.
+if [[ -z "${JAVA_HOME:-}" && -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]]; then
+  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+fi
+if [[ -z "${ANDROID_HOME:-}" && -d /ossdata/android-sdk ]]; then
+  export ANDROID_HOME=/ossdata/android-sdk
+fi
+if [[ -n "${JAVA_HOME:-}" ]]; then
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
+if [[ -z "${ANDROID_HOME:-}" || ! -d "$ANDROID_HOME/platforms/android-36" ]]; then
+  echo "Android SDK platform 36 is not installed or ANDROID_HOME is incorrect." >&2
+  echo "Set ANDROID_HOME=/path/to/sdk and install platforms;android-36." >&2
+  exit 2
+fi
+if [[ ! -d "$ANDROID_HOME/build-tools/36.0.0" ]]; then
+  echo "Android SDK Build Tools 36.0.0 is missing under $ANDROID_HOME." >&2
+  echo 'Install with sdkmanager "build-tools;36.0.0".' >&2
+  exit 2
+fi
+GRADLE_BIN="${GRADLE_BIN:-$ROOT/android/gradlew}"
+if ! command -v "$GRADLE_BIN" >/dev/null 2>&1; then
+  echo "Cannot execute Gradle: $GRADLE_BIN" >&2
+  echo "Run the repository wrapper at android/gradlew or set GRADLE_BIN explicitly." >&2
+  exit 2
+fi
+echo "Using JAVA_HOME=${JAVA_HOME:-<system-java>}"
+echo "Using ANDROID_HOME=$ANDROID_HOME"
+echo "Using Gradle executable=$GRADLE_BIN"
+"$GRADLE_BIN" -p "$ROOT/android" --no-daemon :app:assembleDebug
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 test -s "$APK"
 unzip -Z1 "$APK" | grep -Fx 'assets/offline.html' >/dev/null || {
